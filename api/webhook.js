@@ -181,14 +181,17 @@ export default async function handler(req, res) {
 
   console.log('[arcanju] evento recebido:', JSON.stringify(evento));
 
-  // Responde rápido: a Nuvemshop espera retorno em poucos segundos
-  res.status(200).json({ ok: true });
-
+  // IMPORTANTE: processar ANTES de responder.
+  // Na Vercel a função é encerrada assim que a resposta é enviada,
+  // então qualquer trabalho feito depois do res.status() é cortado.
   try {
     await processar(evento);
+    return res.status(200).json({ ok: true });
   } catch (e) {
     console.error('[arcanju] FALHA:', e && e.message ? e.message : e);
     if (e && e.stack) console.error('[arcanju] stack:', e.stack);
+    // 200 mesmo em erro: evita a Nuvemshop reenviar o webhook em loop
+    return res.status(200).json({ ok: false, erro: String(e && e.message) });
   }
 }
 
