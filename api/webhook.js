@@ -69,21 +69,51 @@ function primeiroNome(nomeCompleto) {
 /* ---------------------------- Nuvemshop API ---------------------------- */
 
 async function buscarPedido(orderId) {
-  const url = `https://api.tiendanube.com/v1/${process.env.NUVEMSHOP_STORE_ID}/orders/${orderId}`;
-  const r = await fetch(url, {
-    headers: {
-      'Authentication': `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`,
-      'User-Agent': 'Use Arcanju (contato@usearcanju.com.br)',
-      'Content-Type': 'application/json'
+  const token = process.env.NUVEMSHOP_ACCESS_TOKEN;
+  const loja = process.env.NUVEMSHOP_STORE_ID;
+
+  if (!token) throw new Error('NUVEMSHOP_ACCESS_TOKEN não está configurado na Vercel');
+  if (!loja) throw new Error('NUVEMSHOP_STORE_ID não está configurado na Vercel');
+  console.log('[arcanju] loja:', loja, '| token termina em:', token.slice(-4));
+
+  // Alguns apps autenticam com "Authentication: bearer", outros com
+  // "Authorization: Bearer". Tentamos os dois antes de desistir.
+  const tentativas = [
+    { nome: 'Authentication/bearer', headers: { 'Authentication': `bearer ${token}` } },
+    { nome: 'Authorization/Bearer',  headers: { 'Authorization': `Bearer ${token}` } }
+  ];
+
+  const url = `https://api.tiendanube.com/v1/${loja}/orders/${orderId}`;
+  let ultimoErro = '';
+
+  for (const t of tentativas) {
+    const r = await fetch(url, {
+      headers: Object.assign({
+        'User-Agent': 'Use Arcanju (contato@usearcanju.com.br)',
+        'Content-Type': 'application/json'
+      }, t.headers)
+    });
+
+    if (r.ok) {
+      console.log('[arcanju] Nuvemshop OK via', t.nome);
+      return r.json();
     }
-  });
-  if (!r.ok) throw new Error(`Nuvemshop ${r.status}: ${await r.text()}`);
-  return r.json();
+
+    ultimoErro = `${t.nome} → HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`;
+    console.warn('[arcanju] Nuvemshop falhou:', ultimoErro);
+  }
+
+  throw new Error('Nuvemshop recusou as duas formas de autenticação. ' + ultimoErro);
 }
 
 /* ----------------------------- WhatsApp API ----------------------------- */
 
 async function enviarTemplate(telefone, template, parametros) {
+  if (!process.env.WHATSAPP_TOKEN) throw new Error('WHATSAPP_TOKEN não configurado');
+  if (!process.env.WHATSAPP_PHONE_ID) throw new Error('WHATSAPP_PHONE_ID não configurado');
+  if (!template) throw new Error('Nome do template não configurado (TEMPLATE_*)');
+  console.log('[arcanju] enviando template', template, 'para', telefone);
+
   const url = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
   const corpo = {
     messaging_product: 'whatsapp',
@@ -157,7 +187,8 @@ export default async function handler(req, res) {
   try {
     await processar(evento);
   } catch (e) {
-    console.error('[arcanju] FALHA:', e.message);
+    console.error('[arcanju] FALHA:', e && e.message ? e.message : e);
+    if (e && e.stack) console.error('[arcanju] stack:', e.stack);
   }
 }
 
