@@ -8,7 +8,8 @@ import crypto from 'crypto';
 
 /* --------------------------------------------------------------------------
    Variáveis de ambiente (configurar na Vercel):
-   NUVEMSHOP_CLIENT_SECRET  → segredo do app, valida a assinatura do webhook
+   WEBHOOK_SECRET           → chave secreta na URL, valida a origem do webhook
+   NUVEMSHOP_CLIENT_SECRET  → (opcional) segredo do app, se existir valida por HMAC
    NUVEMSHOP_ACCESS_TOKEN   → token da sua loja na Nuvemshop
    NUVEMSHOP_STORE_ID       → id numérico da loja
    WHATSAPP_TOKEN           → token permanente da Cloud API
@@ -128,10 +129,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ erro: 'Corpo ilegível' });
   }
 
+  // Validação da origem: por chave na URL e/ou por assinatura HMAC
+  const segredoUrl = process.env.WEBHOOK_SECRET;
+  const chaveRecebida = new URL(req.url, 'http://x').searchParams.get('k');
   const assinatura = req.headers['x-linkedstore-hmac-sha256'];
-  if (!assinaturaValida(corpoBruto, assinatura)) {
-    console.warn('[arcanju] assinatura inválida — requisição ignorada');
-    return res.status(401).json({ erro: 'Assinatura inválida' });
+
+  const passouPelaChave = segredoUrl && chaveRecebida === segredoUrl;
+  const passouPeloHmac = assinaturaValida(corpoBruto, assinatura);
+
+  if (!passouPelaChave && !passouPeloHmac) {
+    console.warn('[arcanju] origem não verificada — requisição ignorada');
+    return res.status(401).json({ erro: 'Não autorizado' });
   }
 
   let evento;
