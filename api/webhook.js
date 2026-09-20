@@ -237,12 +237,26 @@ async function processar(evento) {
   }
 
   // order/fulfilled — pedido marcado como enviado
-  // O template usa 4 variáveis: a {{4}} recebe o link de rastreio completo
-  const linkRastreio =
-    pedido.shipping_tracking_url ||
-    (pedido.shipping_tracking_number
-      ? `https://www.linkcorreios.com.br/?id=${pedido.shipping_tracking_number}`
-      : 'https://suporte.usearcanju.com.br/');
+  // O template usa 4 variáveis: a {{4}} recebe o link de rastreio.
+  // Na Use Arcanju o link completo é digitado no campo "código de rastreio",
+  // então ele é usado como está. Se vier um código puro, monta o link.
+  const bruto = (pedido.shipping_tracking_number || '').trim();
+  const urlOficial = (pedido.shipping_tracking_url || '').trim();
+
+  let linkRastreio;
+  if (/^https?:\/\//i.test(bruto)) {
+    linkRastreio = bruto;                       // já é um link: usa direto
+  } else if (/^www\./i.test(bruto)) {
+    linkRastreio = 'https://' + bruto;          // link sem o https
+  } else if (urlOficial) {
+    linkRastreio = urlOficial;                  // link que a transportadora enviou
+  } else if (bruto) {
+    linkRastreio = `https://www.linkcorreios.com.br/?id=${bruto}`;  // código puro
+  } else {
+    linkRastreio = 'https://suporte.usearcanju.com.br/';
+  }
+
+  console.log('[arcanju] rastreio:', linkRastreio);
 
   await enviarTemplate(telefone, process.env.TEMPLATE_ENVIO, [
     nome,          // {{1}} primeiro nome
