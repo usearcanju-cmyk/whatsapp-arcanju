@@ -149,24 +149,30 @@ export default async function handler(req, res) {
     return res.status(400).json({ erro: 'JSON inválido' });
   }
 
+  console.log('[arcanju] evento recebido:', JSON.stringify(evento));
+
   // Responde rápido: a Nuvemshop espera retorno em poucos segundos
   res.status(200).json({ ok: true });
 
   try {
     await processar(evento);
   } catch (e) {
-    console.error('[arcanju] falha ao processar:', e.message);
+    console.error('[arcanju] FALHA:', e.message);
   }
 }
 
 async function processar(evento) {
   const tipo = evento.event;
   if (tipo !== 'order/paid' && tipo !== 'order/fulfilled') {
-    console.log('[arcanju] evento ignorado:', tipo);
+    console.log('[arcanju] evento ignorado (não é paid nem fulfilled):', tipo);
     return;
   }
 
+  console.log('[arcanju] buscando pedido', evento.id);
   const pedido = await buscarPedido(evento.id);
+  console.log('[arcanju] pedido', pedido.number,
+    '| telefone bruto:', pedido.contact_phone,
+    '| customer.phone:', pedido.customer && pedido.customer.phone);
 
   const telefone = normalizarTelefone(
     pedido.contact_phone ||
@@ -175,9 +181,10 @@ async function processar(evento) {
   );
 
   if (!telefone) {
-    console.warn('[arcanju] pedido', pedido.number, 'sem telefone válido');
+    console.warn('[arcanju] pedido', pedido.number, 'SEM TELEFONE VÁLIDO — nada enviado');
     return;
   }
+  console.log('[arcanju] telefone normalizado:', telefone);
 
   const nome = primeiroNome(
     pedido.contact_name || (pedido.customer && pedido.customer.name)
