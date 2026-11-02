@@ -1,12 +1,12 @@
 /* ==========================================================================
    Use Arcanju — Diagnóstico e registro do número na Cloud API do WhatsApp
-   ARQUIVO DE MANUTENÇÃO: protegido pela WEBHOOK_SECRET.
+   ARQUIVO DE MANUTENÇÃO: protegido pela variável ADMIN_KEY (na Vercel).
 
    Como usar, no navegador:
-     .../api/numero?k=SUA_WEBHOOK_SECRET                        → status do número
-     .../api/numero?k=SUA_WEBHOOK_SECRET&acao=pin&pin=123456       → define um PIN novo
-     .../api/numero?k=SUA_WEBHOOK_SECRET&acao=registrar&pin=123456 → registra de novo
-     .../api/numero?k=SUA_WEBHOOK_SECRET&acao=teste&para=5537999999999 → envia o
+     .../api/numero?k=SUA_ADMIN_KEY                        → status do número
+     .../api/numero?k=SUA_ADMIN_KEY&acao=pin&pin=123456       → define um PIN novo
+     .../api/numero?k=SUA_ADMIN_KEY&acao=registrar&pin=123456 → registra de novo
+     .../api/numero?k=SUA_ADMIN_KEY&acao=teste&para=5537999999999 → envia o
         template de confirmação de teste para o número informado
 
    O "pin" é o PIN de 6 dígitos da verificação em duas etapas do número
@@ -28,7 +28,8 @@ async function graph(caminho, opcoes) {
 
 export default async function handler(req, res) {
   const url = new URL(req.url, 'http://x');
-  if (!process.env.WEBHOOK_SECRET || url.searchParams.get('k') !== process.env.WEBHOOK_SECRET) {
+  const chave = process.env.ADMIN_KEY || process.env.WEBHOOK_SECRET;
+  if (!chave || url.searchParams.get('k') !== chave) {
     return res.status(401).json({ erro: 'Chave inválida' });
   }
   const phoneId = process.env.WHATSAPP_PHONE_ID;
