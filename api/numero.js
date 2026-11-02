@@ -5,6 +5,7 @@
    Como usar, no navegador:
      .../api/numero?k=SUA_ADMIN_KEY                        → status do número
      .../api/numero?k=SUA_ADMIN_KEY&acao=pin&pin=123456       → define um PIN novo
+     .../api/numero?k=SUA_ADMIN_KEY&acao=saude                → diagnóstico completo (por que não envia)
      .../api/numero?k=SUA_ADMIN_KEY&acao=pedircodigo          → pede código por SMS
      .../api/numero?k=SUA_ADMIN_KEY&acao=verificarcodigo&codigo=123456 → confirma o SMS
      Em qualquer ação, &id=PHONE_NUMBER_ID testa outro ID sem mexer na Vercel.
@@ -53,6 +54,14 @@ export default async function handler(req, res) {
         body: JSON.stringify({ messaging_product: 'whatsapp', pin })
       });
       return res.status(200).json({ acao: 'registrar', ok: r.corpo && r.corpo.success === true, resposta: r });
+    }
+
+    if (acao === 'saude') {
+      // Pergunta para a Meta POR QUE o número não pode enviar
+      const waba = (url.searchParams.get('waba') || '2005404373440744').replace(/\D/g, '');
+      const numero = await graph(`${phoneId}?fields=health_status,status,platform_type,name_status,new_name_status,code_verification_status,account_mode,throughput,is_official_business_account`);
+      const conta = await graph(`${waba}?fields=name,account_review_status,business_verification_status,health_status,ownership_type,primary_business_location`);
+      return res.status(200).json({ acao: 'saude', phoneId, waba, numero, conta });
     }
 
     if (acao === 'pedircodigo') {
