@@ -5,6 +5,9 @@
    Como usar, no navegador:
      .../api/numero?k=SUA_ADMIN_KEY                        → status do número
      .../api/numero?k=SUA_ADMIN_KEY&acao=pin&pin=123456       → define um PIN novo
+     .../api/numero?k=SUA_ADMIN_KEY&acao=pedircodigo          → pede código por SMS
+     .../api/numero?k=SUA_ADMIN_KEY&acao=verificarcodigo&codigo=123456 → confirma o SMS
+     Em qualquer ação, &id=PHONE_NUMBER_ID testa outro ID sem mexer na Vercel.
      .../api/numero?k=SUA_ADMIN_KEY&acao=registrar&pin=123456 → registra de novo
      .../api/numero?k=SUA_ADMIN_KEY&acao=teste&para=5537999999999 → envia o
         template de confirmação de teste para o número informado
@@ -32,7 +35,9 @@ export default async function handler(req, res) {
   if (!chave || url.searchParams.get('k') !== chave) {
     return res.status(401).json({ erro: 'Chave inválida' });
   }
-  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  // &id= permite testar outro Phone Number ID sem mexer na Vercel
+  const idUrl = (url.searchParams.get('id') || '').replace(/\D/g, '');
+  const phoneId = idUrl || process.env.WHATSAPP_PHONE_ID;
   if (!phoneId || !process.env.WHATSAPP_TOKEN) {
     return res.status(500).json({ erro: 'WHATSAPP_PHONE_ID ou WHATSAPP_TOKEN não configurado na Vercel' });
   }
@@ -48,6 +53,25 @@ export default async function handler(req, res) {
         body: JSON.stringify({ messaging_product: 'whatsapp', pin })
       });
       return res.status(200).json({ acao: 'registrar', ok: r.corpo && r.corpo.success === true, resposta: r });
+    }
+
+    if (acao === 'pedircodigo') {
+      // Envia um código por SMS para o número do WhatsApp (só se a Meta exigir verificação)
+      const r = await graph(`${phoneId}/request_code`, {
+        method: 'POST',
+        body: JSON.stringify({ code_method: (url.searchParams.get('metodo') || 'SMS').toUpperCase() === 'VOICE' ? 'VOICE' : 'SMS', language: 'pt_BR' })
+      });
+      return res.status(200).json({ acao: 'pedircodigo', phoneId, ok: r.corpo && r.corpo.success === true, resposta: r });
+    }
+
+    if (acao === 'verificarcodigo') {
+      const codigo = (url.searchParams.get('codigo') || '').replace(/\D/g, '');
+      if (!codigo) return res.status(400).json({ erro: 'Informe &codigo= que chegou por SMS' });
+      const r = await graph(`${phoneId}/verify_code`, {
+        method: 'POST',
+        body: JSON.stringify({ code: codigo })
+      });
+      return res.status(200).json({ acao: 'verificarcodigo', phoneId, ok: r.corpo && r.corpo.success === true, resposta: r });
     }
 
     if (acao === 'pin') {
@@ -88,6 +112,8 @@ export default async function handler(req, res) {
     const r = await graph(`${phoneId}?fields=display_phone_number,verified_name,status,platform_type,quality_rating,code_verification_status,name_status,messaging_limit_tier`);
     return res.status(200).json({
       acao: 'status',
+      phoneId_usado: phoneId,
+      phoneId_da_vercel: process.env.WHATSAPP_PHONE_ID,
       leitura: {
         'platform_type = CLOUD_API': 'número registrado e pronto para enviar',
         'platform_type = NOT_APPLICABLE': 'número NÃO registrado → use acao=registrar',
