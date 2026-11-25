@@ -18,6 +18,10 @@ export default async function handler(req, res) {
   if (!chave || k !== chave) return res.status(401).send('Não autorizado');
 
   const envios = await listarEnvios(200);
+  if (new URL(req.url, 'http://x').searchParams.get('formato') === 'json') {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json({ envios });
+  }
   const linhas = envios.map((e) => {
     const [rot, cor, dica] = SELO[e.status] || [e.status, '#555', ''];
     const quando = e.lidaEm || e.entregueEm || e.enviadoEm;
