@@ -13,6 +13,8 @@
      UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN
    ========================================================================== */
 
+import { registrarStatus } from './_registro.js';
+
 const SUPORTE = 'https://suporte.usearcanju.com.br/';
 const LOJA = 'https://usearcanju.com.br/';
 
@@ -56,6 +58,9 @@ export default async function handler(req, res) {
     const mudancas = ((corpo && corpo.entry) || []).flatMap((e) => e.changes || []);
 
     for (const m of mudancas) {
+      // Avisos de entrega das mensagens que NÓS enviamos (enviada / entregue / lida / falhou)
+      for (const st of (m.value && m.value.statuses) || []) await registrarStatus(st);
+
       const mensagens = (m.value && m.value.messages) || [];
       for (const msg of mensagens) {
         const de = msg.from;                                   // ex: 5537999999999

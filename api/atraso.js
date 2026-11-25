@@ -27,6 +27,7 @@
                                          "max" usa o maior
    ========================================================================== */
 
+import { registrarEnvio } from './_registro.js';
 const H = 3600 * 1000;
 const DIA = 24 * H;
 const JANELA_DIAS = 60;
@@ -161,6 +162,7 @@ async function enviarTemplate(telefone, template, parametros) {
   });
   const j = await r.json();
   if (!r.ok) throw new Error(`WhatsApp ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
+  await registrarEnvio(j, template, telefone, parametros);
   return j;
 }
 

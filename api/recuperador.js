@@ -26,6 +26,7 @@
                                              criados antes disso são ignorados
    ========================================================================== */
 
+import { registrarEnvio } from './_registro.js';
 const H = 3600 * 1000;
 const ETAPA1_DEPOIS = 1 * H;      // manda o lembrete depois de 1h parado
 const ETAPA1_ATE = 20 * H;        // ...se ainda estiver dentro de 20h
@@ -178,6 +179,7 @@ async function enviarTemplate(telefone, template, parametros) {
   });
   const j = await r.json();
   if (!r.ok) throw new Error(`WhatsApp ${r.status}: ${JSON.stringify(j).slice(0, 300)}`);
+  await registrarEnvio(j, template, telefone, parametros);
   return j;
 }
 

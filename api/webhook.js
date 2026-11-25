@@ -4,6 +4,7 @@
    Endpoint: POST /api/webhook
    ========================================================================== */
 
+import { registrarEnvio } from './_registro.js';
 import crypto from 'crypto';
 
 /* --------------------------------------------------------------------------
@@ -142,6 +143,7 @@ async function enviarTemplate(telefone, template, parametros) {
 
   const resposta = await r.json();
   if (!r.ok) throw new Error(`WhatsApp ${r.status}: ${JSON.stringify(resposta)}`);
+  await registrarEnvio(resposta, template, telefone, parametros);
   return resposta;
 }
 
