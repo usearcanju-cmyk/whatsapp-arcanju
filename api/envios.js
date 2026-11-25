@@ -13,9 +13,10 @@ const SELO = {
 };
 
 export default async function handler(req, res) {
-  const chave = process.env.ADMIN_KEY || process.env.WEBHOOK_SECRET;
+  // Aceita a ADMIN_KEY ou a PAINEL_KEY (chave só de leitura usada pelo painel do suporte)
+  const chaves = [process.env.ADMIN_KEY, process.env.WEBHOOK_SECRET, process.env.PAINEL_KEY].filter(Boolean);
   const k = new URL(req.url, 'http://x').searchParams.get('k');
-  if (!chave || k !== chave) return res.status(401).send('Não autorizado');
+  if (!k || !chaves.includes(k)) return res.status(401).send('Não autorizado');
 
   const envios = await listarEnvios(200);
   if (new URL(req.url, 'http://x').searchParams.get('formato') === 'json') {
