@@ -18,7 +18,8 @@ const NOMES = () => ({
   [process.env.TEMPLATE_ENVIO]: 'Pedido enviado',
   [process.env.TEMPLATE_ATRASO]: 'Pedido atrasado',
   [process.env.TEMPLATE_CARRINHO_1]: 'Carrinho (lembrete)',
-  [process.env.TEMPLATE_CARRINHO_2]: 'Carrinho (cupom)'
+  [process.env.TEMPLATE_CARRINHO_2]: 'Carrinho (cupom)',
+  [process.env.TEMPLATE_CAMPANHA]: 'Campanha (' + (process.env.CAMPANHA_ID || 'massa') + ')'
 });
 
 const ORDEM = { enviada: 1, entregue: 2, lida: 3 };
