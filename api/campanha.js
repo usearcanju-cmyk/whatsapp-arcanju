@@ -29,6 +29,7 @@
      CAMPANHA_LIMITE_DIA   máximo por dia (padrão 250 — limite inicial da Meta para número novo)
      CAMPANHA_CARRINHOS_DIAS  quantos dias de carrinhos abandonados olhar (padrão 30)
      CAMPANHA_IMAGEM       (opcional) link da imagem, se o modelo tiver imagem no cabeçalho
+     CAMPANHA_IMAGEM_ONDAS quais ondas têm imagem no cabeçalho do modelo (padrão "1"; ex.: "1,3,5" ou "todas")
      + as mesmas do recuperador: NUVEMSHOP_*, WHATSAPP_*, UPSTASH_*
    ========================================================================== */
 
@@ -106,7 +107,17 @@ async function nsListar(caminho, paginasMax) {
 
 /* ------------------------------ WhatsApp -------------------------------- */
 
-async function enviarTemplate(telefone, template, nome) {
+/* a imagem só vai nas ondas cujo modelo foi aprovado COM imagem no cabeçalho (senão a Meta recusa) */
+function imagemDaOnda(onda) {
+  const img = process.env.CAMPANHA_IMAGEM;
+  if (!img) return null;
+  const cfg = String(process.env.CAMPANHA_IMAGEM_ONDAS || '1').trim().toLowerCase();
+  if (cfg === 'todas') return img;
+  return cfg.split(/[\s,;]+/).map(Number).includes(Number(onda)) ? img : null;
+}
+
+async function enviarTemplate(telefone, template, nome, onda = 1) {
+  const imagem = imagemDaOnda(onda);
   const r = await fetch(`https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, 'Content-Type': 'application/json' },
@@ -119,7 +130,7 @@ async function enviarTemplate(telefone, template, nome) {
         language: { code: 'pt_BR' },
         components: [
           // modelo com imagem no topo: a imagem vai junto em cada envio (CAMPANHA_IMAGEM = link público .jpg/.png)
-          ...(process.env.CAMPANHA_IMAGEM ? [{ type: 'header', parameters: [{ type: 'image', image: { link: process.env.CAMPANHA_IMAGEM } }] }] : []),
+          ...(imagem ? [{ type: 'header', parameters: [{ type: 'image', image: { link: imagem } }] }] : []),
           { type: 'body', parameters: [{ type: 'text', text: String(nome) }] }
         ]
       }
@@ -288,7 +299,7 @@ async function acaoEnviar(teste, para, ondaTeste) {
     const template = templateDe(ondaTeste);
     if (!template) throw new Error(`Defina o modelo da onda ${ondaTeste} na Vercel`);
     if (!para) return { modo: 'TESTE', aviso: 'Use &para=DDDNUMERO para receber 1 mensagem de teste' };
-    const r = await enviarTemplate(para, template, 'Mateus');
+    const r = await enviarTemplate(para, template, 'Mateus', ondaTeste);
     return { modo: 'TESTE', enviada_para: '•••' + para.slice(-4), id: r.messages && r.messages[0] && r.messages[0].id };
   }
 
@@ -326,7 +337,7 @@ async function acaoEnviar(teste, para, ondaTeste) {
       if (!novo) { res.puladas++; continue; }
       restam--;
       try {
-        await enviarTemplate(c.tel, template, c.nome);
+        await enviarTemplate(c.tel, template, c.nome, onda);
         res.enviadas++;
         res.por_onda[onda] = (res.por_onda[onda] || 0) + 1;
         await redis(['INCR', chaveDia]);
