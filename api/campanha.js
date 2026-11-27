@@ -26,6 +26,7 @@
      CAMPANHA_LOTE         mensagens por rodada (padrão 40)
      CAMPANHA_LIMITE_DIA   máximo por dia (padrão 250 — limite inicial da Meta para número novo)
      CAMPANHA_CARRINHOS_DIAS  quantos dias de carrinhos abandonados olhar (padrão 30)
+     CAMPANHA_IMAGEM       (opcional) link da imagem, se o modelo tiver imagem no cabeçalho
      + as mesmas do recuperador: NUVEMSHOP_*, WHATSAPP_*, UPSTASH_*
    ========================================================================== */
 
@@ -114,7 +115,11 @@ async function enviarTemplate(telefone, template, nome) {
       template: {
         name: template,
         language: { code: 'pt_BR' },
-        components: [{ type: 'body', parameters: [{ type: 'text', text: String(nome) }] }]
+        components: [
+          // modelo com imagem no topo: a imagem vai junto em cada envio (CAMPANHA_IMAGEM = link público .jpg/.png)
+          ...(process.env.CAMPANHA_IMAGEM ? [{ type: 'header', parameters: [{ type: 'image', image: { link: process.env.CAMPANHA_IMAGEM } }] }] : []),
+          { type: 'body', parameters: [{ type: 'text', text: String(nome) }] }
+        ]
       }
     })
   });
