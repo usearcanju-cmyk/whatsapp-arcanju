@@ -29,6 +29,7 @@
      CAMPANHA_LIMITE_DIA   máximo por dia (padrão 250 — limite inicial da Meta para número novo)
      CAMPANHA_CARRINHOS_DIAS  quantos dias de carrinhos abandonados olhar (padrão 30)
      CAMPANHA_IMAGEM       (opcional) link da imagem, se o modelo tiver imagem no cabeçalho
+     CAMPANHA_IMAGEM_5     (opcional) imagem própria de uma onda (vale para _2 … _6); a onda passa a ir com imagem
      CAMPANHA_IMAGEM_ONDAS quais ondas têm imagem no cabeçalho do modelo (padrão "1"; ex.: "1,3,5" ou "todas")
      + as mesmas do recuperador: NUVEMSHOP_*, WHATSAPP_*, UPSTASH_*
    ========================================================================== */
@@ -109,6 +110,8 @@ async function nsListar(caminho, paginasMax) {
 
 /* a imagem só vai nas ondas cujo modelo foi aprovado COM imagem no cabeçalho (senão a Meta recusa) */
 function imagemDaOnda(onda) {
+  const propria = process.env[`CAMPANHA_IMAGEM_${onda}`]; // imagem só dessa onda (ex.: CAMPANHA_IMAGEM_5)
+  if (propria) return propria;
   const img = process.env.CAMPANHA_IMAGEM;
   if (!img) return null;
   const cfg = String(process.env.CAMPANHA_IMAGEM_ONDAS || '1').trim().toLowerCase();

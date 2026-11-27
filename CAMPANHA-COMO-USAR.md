@@ -43,6 +43,7 @@ Exemplo para {{1}}: `Maria`
 | `CAMPANHA_LOTE` | `80` (até 480 por hora) |
 | `CAMPANHA_ATIVA` | `nao` (só muda para `sim` no Passo 5) |
 | `CAMPANHA_IMAGEM` | link público da arte (.jpg/.png) |
+| `CAMPANHA_IMAGEM_5` (opcional) | imagem própria de uma onda (vale `_2` a `_6`); o modelo dessa onda precisa ter imagem no cabeçalho |
 | `CAMPANHA_IMAGEM_ONDAS` | quais ondas têm imagem no modelo (padrão `1`; ex.: `1,3,5` ou `todas`) |
 Depois: Deployments → Redeploy.
 
