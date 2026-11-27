@@ -11,6 +11,8 @@
      acao=enviar     manda o próximo lote da fila (chamado pelo agendador a cada 10 min).
                      Respeita o limite diário e para sozinho no fim da campanha.
                      &teste=1&para=DDD+número manda 1 mensagem só para esse número.
+     acao=preparar&onda=2 (3, 4)  lembrete: quem recebeu a onda anterior e NÃO comprou
+                     (precisa do modelo TEMPLATE_CAMPANHA_2, _3, _4)
      acao=status     quantos na fila, enviados hoje, enviados no total, falhas,
                      e as vendas que usaram o cupom.
      acao=pausar / acao=retomar
@@ -138,6 +140,22 @@ async function enviarTemplate(telefone, template, nome) {
 
 const CAMP = () => process.env.CAMPANHA_ID || 'campanha';
 const K = (s) => `camp:${CAMP()}:${s}`;
+const filaDe = (n) => (n === 1 ? K('fila') : K(`fila:${n}`));
+const enviadosDe = (n) => (n === 1 ? K('enviados') : K(`enviados:${n}`));
+const templateDe = (n) => (n === 1 ? (process.env.TEMPLATE_CAMPANHA || process.env.TEMPLATE_CAMPANHA_1) : process.env[`TEMPLATE_CAMPANHA_${n}`]);
+const ONDAS = [1, 2, 3, 4];
+
+/* telefones que compraram desde um momento (para não mandar lembrete a quem já comprou) */
+async function compraramDesde(iso) {
+  const pedidos = await nsListar(`/orders?created_at_min=${encodeURIComponent(iso)}&fields=id,contact_phone,customer,shipping_address,status,payment_status`, 10);
+  const s = new Set();
+  for (const p of pedidos) {
+    if (p.status === 'cancelled' || !['paid', 'authorized'].includes(p.payment_status)) continue;
+    const tel = normalizarTelefone(p.contact_phone || (p.customer && p.customer.phone) || (p.shipping_address && p.shipping_address.phone));
+    if (tel) s.add(tel);
+  }
+  return s;
+}
 
 async function acaoCupom() {
   const codigo = (process.env.CAMPANHA_CUPOM || '').toUpperCase();
@@ -164,7 +182,8 @@ async function acaoCupom() {
   return { cupom: codigo, situacao: 'criado', id: j.id, valor: j.value, minimo: j.min_price, fim: j.end_date };
 }
 
-async function acaoPreparar(teste) {
+async function acaoPreparar(teste, onda) {
+  if (onda > 1) return prepararOnda(teste, onda);
   const diasCarrinho = Number(process.env.CAMPANHA_CARRINHOS_DIAS || 30);
   const desdeCarrinho = new Date(Date.now() - diasCarrinho * 24 * H).toISOString();
 
@@ -224,17 +243,49 @@ async function acaoPreparar(teste) {
 
   await redis(['DEL', K('fila')]);
   for (let i = 0; i < fila.length; i += 200) {
-    await redis(['RPUSH', K('fila'), ...fila.slice(i, i + 200).map((c) => JSON.stringify(c))]);
+    const bloco = fila.slice(i, i + 200);
+    await redis(['RPUSH', K('fila'), ...bloco.map((c) => JSON.stringify(c))]);
+    await redis(['HSET', K('nomes'), ...bloco.flatMap((c) => [c.tel, c.nome])]);
   }
-  await redis(['SET', K('preparadaEm'), new Date().toISOString()]);
+  if (!(await redis(['GET', K('preparadaEm')]))) await redis(['SET', K('preparadaEm'), new Date().toISOString()]);
   return { ...resumo, modo: 'fila gravada' };
 }
 
-async function acaoEnviar(teste, para) {
-  const template = process.env.TEMPLATE_CAMPANHA;
-  if (!template) throw new Error('Defina TEMPLATE_CAMPANHA na Vercel');
+async function prepararOnda(teste, onda) {
+  if (!templateDe(onda)) throw new Error(`Defina TEMPLATE_CAMPANHA_${onda} na Vercel (modelo aprovado da onda ${onda})`);
+  const inicio = await redis(['GET', K('preparadaEm')]);
+  if (!inicio) throw new Error('Prepare a onda 1 primeiro');
+  const base = (await redis(['SMEMBERS', enviadosDe(onda - 1)])) || [];
+  const compraram = await compraramDesde(new Date(new Date(inicio).getTime() - 2 * H).toISOString());
+  const fila = [];
+  let jaComprou = 0, sairam = 0, jaRecebeu = 0;
+  for (let i = 0; i < base.length; i += 100) {
+    const bloco = base.slice(i, i + 100);
+    const [optouts, enviados, nomes] = await Promise.all([
+      redis(['MGET', ...bloco.map((t) => `optout:${t}`)]),
+      redis(['SMISMEMBER', enviadosDe(onda), ...bloco]),
+      redis(['HMGET', K('nomes'), ...bloco])
+    ]);
+    bloco.forEach((tel, j) => {
+      if (compraram.has(tel)) { jaComprou++; return; }
+      if (optouts[j] !== null) { sairam++; return; }
+      if (enviados[j]) { jaRecebeu++; return; }
+      fila.push({ tel, nome: nomes[j] || 'tudo bem', origem: `onda ${onda}` });
+    });
+  }
+  const resumo = { campanha: CAMP(), onda, receberam_a_anterior: base.length, ja_compraram: jaComprou, pediram_sair: sairam, ja_receberam: jaRecebeu, na_fila: fila.length };
+  if (teste) return { ...resumo, modo: 'TESTE (fila não gravada)' };
+  await redis(['DEL', filaDe(onda)]);
+  for (let i = 0; i < fila.length; i += 200) {
+    await redis(['RPUSH', filaDe(onda), ...fila.slice(i, i + 200).map((c) => JSON.stringify(c))]);
+  }
+  return { ...resumo, modo: 'fila gravada' };
+}
 
+async function acaoEnviar(teste, para, ondaTeste) {
   if (teste) {
+    const template = templateDe(ondaTeste);
+    if (!template) throw new Error(`Defina o modelo da onda ${ondaTeste} na Vercel`);
     if (!para) return { modo: 'TESTE', aviso: 'Use &para=DDDNUMERO para receber 1 mensagem de teste' };
     const r = await enviarTemplate(para, template, 'Mateus');
     return { modo: 'TESTE', enviada_para: '•••' + para.slice(-4), id: r.messages && r.messages[0] && r.messages[0].id };
@@ -252,32 +303,48 @@ async function acaoEnviar(teste, para) {
   const podem = Math.min(lote, limiteDia - jaHoje);
   if (podem <= 0) return { parado: `limite do dia atingido (${limiteDia})` };
 
-  const res = { enviadas: 0, falhas: 0, puladas: 0, erros: [] };
-  for (let i = 0; i < podem; i++) {
-    const bruto = await redis(['LPOP', K('fila')]);
-    if (!bruto) { res.fila_vazia = true; break; }
-    const c = JSON.parse(bruto);
-    // checa de novo na hora de enviar (pode ter pedido SAIR ou recebido em outra rodada)
-    if (await redis(['GET', `optout:${c.tel}`]) !== null) { res.puladas++; continue; }
-    const novo = await redis(['SADD', K('enviados'), c.tel]);
-    if (!novo) { res.puladas++; continue; }
-    try {
-      await enviarTemplate(c.tel, template, c.nome);
-      res.enviadas++;
-      await redis(['INCR', chaveDia]);
-      await redis(['EXPIRE', chaveDia, String(3 * 86400)]);
-    } catch (e) {
-      res.falhas++;
-      await redis(['RPUSH', K('falhas'), JSON.stringify({ ...c, erro: e.message, em: new Date().toISOString() })]);
-      if (res.erros.length < 3) res.erros.push(e.message);
-      // limite da Meta (131048/131056/80007): para a rodada para não queimar o número
-      if ([131048, 131056, 80007, 130429].includes(e.codigo)) { res.parou_por_limite_meta = true; break; }
+  const res = { enviadas: 0, falhas: 0, puladas: 0, erros: [], por_onda: {} };
+  let restam = podem;
+  // ondas mais novas primeiro: lembretes têm hora certa; a onda 1 continua com o que sobrar
+  for (const onda of ONDAS.slice().reverse()) {
+    if (restam <= 0 || res.parou_por_limite_meta) break;
+    const template = templateDe(onda);
+    if (!template) continue;
+    while (restam > 0) {
+      const bruto = await redis(['LPOP', filaDe(onda)]);
+      if (!bruto) break;
+      const c = JSON.parse(bruto);
+      // checa de novo na hora de enviar (pode ter pedido SAIR ou recebido em outra rodada)
+      if (await redis(['GET', `optout:${c.tel}`]) !== null) { res.puladas++; continue; }
+      const novo = await redis(['SADD', enviadosDe(onda), c.tel]);
+      if (!novo) { res.puladas++; continue; }
+      restam--;
+      try {
+        await enviarTemplate(c.tel, template, c.nome);
+        res.enviadas++;
+        res.por_onda[onda] = (res.por_onda[onda] || 0) + 1;
+        await redis(['INCR', chaveDia]);
+        await redis(['EXPIRE', chaveDia, String(3 * 86400)]);
+      } catch (e) {
+        res.falhas++;
+        await redis(['RPUSH', K('falhas'), JSON.stringify({ ...c, onda, erro: e.message, em: new Date().toISOString() })]);
+        if (res.erros.length < 3) res.erros.push(e.message);
+        // limite da Meta: para a rodada para não queimar o número
+        if ([131048, 131056, 80007, 130429].includes(e.codigo)) { res.parou_por_limite_meta = true; break; }
+      }
     }
   }
+  if (res.enviadas === 0 && !res.parou_por_limite_meta) res.filas_vazias = true;
   return res;
 }
 
 async function acaoStatus() {
+  const ondas = {};
+  for (const n of ONDAS) {
+    if (!templateDe(n)) continue;
+    const [f, e] = await Promise.all([redis(['LLEN', filaDe(n)]), redis(['SCARD', enviadosDe(n)])]);
+    ondas[n] = { modelo: templateDe(n), na_fila: f, enviadas: e };
+  }
   const [fila, enviados, falhas, hoje, pausada, preparadaEm] = await Promise.all([
     redis(['LLEN', K('fila')]),
     redis(['SCARD', K('enviados')]),
@@ -296,7 +363,8 @@ async function acaoStatus() {
     enviadas_total: Number(enviados) - Number(falhas),
     enviadas_hoje: Number(hoje) || 0,
     limite_dia: Number(process.env.CAMPANHA_LIMITE_DIA || 250),
-    falhas: falhas
+    falhas: falhas,
+    ondas
   };
   // vendas com o cupom desde que a fila foi preparada
   const cupom = (process.env.CAMPANHA_CUPOM || '').toUpperCase();
@@ -323,11 +391,12 @@ export default async function handler(req, res) {
   const acao = url.searchParams.get('acao') || 'status';
   const teste = url.searchParams.get('teste') === '1';
   const para = normalizarTelefone(url.searchParams.get('para'));
+  const onda = Math.min(4, Math.max(1, parseInt(url.searchParams.get('onda') || '1', 10) || 1));
   try {
     let r;
     if (acao === 'cupom') r = await acaoCupom();
-    else if (acao === 'preparar') r = await acaoPreparar(teste);
-    else if (acao === 'enviar') r = await acaoEnviar(teste, para);
+    else if (acao === 'preparar') r = await acaoPreparar(teste, onda);
+    else if (acao === 'enviar') r = await acaoEnviar(teste, para, onda);
     else if (acao === 'pausar') { await redis(['SET', K('pausada'), '1']); r = { pausada: true }; }
     else if (acao === 'retomar') { await redis(['DEL', K('pausada')]); r = { pausada: false }; }
     else r = await acaoStatus();

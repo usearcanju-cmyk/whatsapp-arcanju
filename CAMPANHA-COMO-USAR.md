@@ -60,6 +60,13 @@ Abrir `/api/campanha?k=ADMIN_KEY&acao=cupom` → cria o BLACK99 na Nuvemshop (R$
    - 40 por rodada = até 240 por hora, até bater o limite do dia; no dia seguinte continua sozinho.
    - Para sozinho 2h antes do `CAMPANHA_FIM`.
 
+## Ondas de lembrete (só para quem ainda não comprou)
+- Cada onda tem seu modelo aprovado: `TEMPLATE_CAMPANHA_2`, `_3`, `_4` (mesmo formato, só {{1}} = nome).
+- Na hora da onda: `/api/campanha?k=ADMIN_KEY&acao=preparar&onda=2` → pega quem recebeu a onda anterior, tira quem já comprou (qualquer pedido pago desde o início da campanha) e quem pediu SAIR.
+- O mesmo agendador de 10 em 10 min envia: ondas mais novas primeiro, e a onda 1 continua com as vagas que sobrarem do limite do dia.
+- Dá para agendar o "preparar" de cada onda no QStash (um agendamento por onda, no horário dela) e apagar depois.
+- Teste de uma onda: `&acao=enviar&teste=1&onda=2&para=37999999999`.
+
 ## Acompanhar e controlar
 - `/api/campanha?k=ADMIN_KEY&acao=status` → na fila, enviadas hoje/total, falhas e **vendas com o cupom** (quantidade e faturamento).
 - `/api/envios?k=ADMIN_KEY` → entregue/lida de cada mensagem (aparece como "Campanha (black2026)").
