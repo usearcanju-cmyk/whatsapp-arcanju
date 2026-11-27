@@ -291,7 +291,14 @@ async function prepararOnda(teste, onda) {
   for (let i = 0; i < fila.length; i += 200) {
     await redis(['RPUSH', filaDe(onda), ...fila.slice(i, i + 200).map((c) => JSON.stringify(c))]);
   }
-  return { ...resumo, modo: 'fila gravada' };
+  // lembretes antigos que não deu tempo de mandar são descartados: o texto deles fala de um dia
+  // específico ("acaba amanhã") e ficaria errado. A onda 1 continua (o texto dela vale qualquer dia).
+  let descartados = 0;
+  for (let n = 2; n < onda; n++) {
+    descartados += Number(await redis(['LLEN', filaDe(n)])) || 0;
+    await redis(['DEL', filaDe(n)]);
+  }
+  return { ...resumo, lembretes_antigos_descartados: descartados, modo: 'fila gravada' };
 }
 
 async function acaoEnviar(teste, para, ondaTeste) {
