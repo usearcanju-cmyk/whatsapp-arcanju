@@ -149,6 +149,20 @@ async function enviarTemplate(telefone, template, parametros) {
 
 /* ------------------------------ handler -------------------------------- */
 
+async function marcarCompraNaCampanha(telefone) {
+  try {
+    const id = process.env.CAMPANHA_ID, url = process.env.UPSTASH_REDIS_REST_URL, token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!id || !url || !token) return;
+    await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(['SADD', `camp:${id}:compraram`, telefone])
+    });
+  } catch (e) {
+    console.error('[arcanju] não marcou compra na campanha:', e && e.message);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ erro: 'Use POST' });
@@ -229,6 +243,9 @@ async function processar(evento) {
   const numero = String(pedido.number || evento.id);
 
   if (tipo === 'order/paid') {
+    // Campanha em andamento: quem compra sai das próximas mensagens da campanha na hora
+    // (só da campanha — confirmação, envio e atraso continuam normalmente).
+    await marcarCompraNaCampanha(telefone);
     await enviarTemplate(telefone, process.env.TEMPLATE_CONFIRMACAO, [
       nome,      // {{1}} primeiro nome
       numero,    // {{2}} número do pedido

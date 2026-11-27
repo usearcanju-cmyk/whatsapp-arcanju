@@ -143,7 +143,7 @@ const K = (s) => `camp:${CAMP()}:${s}`;
 const filaDe = (n) => (n === 1 ? K('fila') : K(`fila:${n}`));
 const enviadosDe = (n) => (n === 1 ? K('enviados') : K(`enviados:${n}`));
 const templateDe = (n) => (n === 1 ? (process.env.TEMPLATE_CAMPANHA || process.env.TEMPLATE_CAMPANHA_1) : process.env[`TEMPLATE_CAMPANHA_${n}`]);
-const ONDAS = [1, 2, 3, 4];
+const ONDAS = [1, 2, 3, 4, 5, 6];
 
 /* telefones que compraram desde um momento (para não mandar lembrete a quem já comprou) */
 async function compraramDesde(iso) {
@@ -261,13 +261,14 @@ async function prepararOnda(teste, onda) {
   let jaComprou = 0, sairam = 0, jaRecebeu = 0;
   for (let i = 0; i < base.length; i += 100) {
     const bloco = base.slice(i, i + 100);
-    const [optouts, enviados, nomes] = await Promise.all([
+    const [optouts, enviados, nomes, compraramAgora] = await Promise.all([
       redis(['MGET', ...bloco.map((t) => `optout:${t}`)]),
       redis(['SMISMEMBER', enviadosDe(onda), ...bloco]),
-      redis(['HMGET', K('nomes'), ...bloco])
+      redis(['HMGET', K('nomes'), ...bloco]),
+      redis(['SMISMEMBER', K('compraram'), ...bloco])
     ]);
     bloco.forEach((tel, j) => {
-      if (compraram.has(tel)) { jaComprou++; return; }
+      if (compraram.has(tel) || compraramAgora[j]) { jaComprou++; return; }
       if (optouts[j] !== null) { sairam++; return; }
       if (enviados[j]) { jaRecebeu++; return; }
       fila.push({ tel, nome: nomes[j] || 'tudo bem', origem: `onda ${onda}` });
@@ -295,6 +296,9 @@ async function acaoEnviar(teste, para, ondaTeste) {
   if (await redis(['GET', K('pausada')])) return { parado: 'campanha pausada' };
   const fim = process.env.CAMPANHA_FIM ? new Date(process.env.CAMPANHA_FIM).getTime() : 0;
   if (fim && Date.now() > fim - 2 * H) return { parado: 'campanha terminando ou terminada — não envia mais' };
+  const hora = new Date(Date.now() - 3 * H).getUTCHours();
+  const ini = Number(process.env.CAMPANHA_HORA_INICIO || 8), fimHora = Number(process.env.CAMPANHA_HORA_FIM || 22);
+  if (hora < ini || hora >= fimHora) return { parado: `fora do horário de envio (${ini}h às ${fimHora}h)` };
 
   const limiteDia = Number(process.env.CAMPANHA_LIMITE_DIA || 250);
   const lote = Number(process.env.CAMPANHA_LOTE || 40);
@@ -316,6 +320,8 @@ async function acaoEnviar(teste, para, ondaTeste) {
       const c = JSON.parse(bruto);
       // checa de novo na hora de enviar (pode ter pedido SAIR ou recebido em outra rodada)
       if (await redis(['GET', `optout:${c.tel}`]) !== null) { res.puladas++; continue; }
+      // comprou durante a campanha (marcado na hora pelo webhook de pedido pago): sai das mensagens da campanha
+      if (await redis(['SISMEMBER', K('compraram'), c.tel])) { res.puladas++; res.ja_compraram = (res.ja_compraram || 0) + 1; continue; }
       const novo = await redis(['SADD', enviadosDe(onda), c.tel]);
       if (!novo) { res.puladas++; continue; }
       restam--;
@@ -391,7 +397,7 @@ export default async function handler(req, res) {
   const acao = url.searchParams.get('acao') || 'status';
   const teste = url.searchParams.get('teste') === '1';
   const para = normalizarTelefone(url.searchParams.get('para'));
-  const onda = Math.min(4, Math.max(1, parseInt(url.searchParams.get('onda') || '1', 10) || 1));
+  const onda = Math.min(6, Math.max(1, parseInt(url.searchParams.get('onda') || '1', 10) || 1));
   try {
     let r;
     if (acao === 'cupom') r = await acaoCupom();

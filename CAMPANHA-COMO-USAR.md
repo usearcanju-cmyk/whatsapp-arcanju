@@ -40,7 +40,7 @@ Exemplo para {{1}}: `Maria`
 | `CAMPANHA_CUPOM_MINIMO` | `150` (1 camiseta não usa) |
 | `CAMPANHA_FIM` | `2026-11-29T23:59:00-03:00` |
 | `CAMPANHA_LIMITE_DIA` | o limite do número no WhatsApp Manager (Visão geral → Limite de mensagens). Número novo costuma começar em 250 |
-| `CAMPANHA_LOTE` | `40` |
+| `CAMPANHA_LOTE` | `80` (até 480 por hora) |
 | `CAMPANHA_ATIVA` | `nao` (só muda para `sim` no Passo 5) |
 Depois: Deployments → Redeploy.
 
@@ -61,7 +61,9 @@ Abrir `/api/campanha?k=ADMIN_KEY&acao=cupom` → cria o BLACK99 na Nuvemshop (R$
    - Para sozinho 2h antes do `CAMPANHA_FIM`.
 
 ## Ondas de lembrete (só para quem ainda não comprou)
-- Cada onda tem seu modelo aprovado: `TEMPLATE_CAMPANHA_2`, `_3`, `_4` (mesmo formato, só {{1}} = nome).
+- Até 6 ondas. Cada uma tem seu modelo aprovado: `TEMPLATE_CAMPANHA_2` … `_6` (mesmo formato, só {{1}} = nome).
+- **Quem compra sai na hora:** o webhook de pedido pago marca o telefone em `camp:<id>:compraram` e nenhuma mensagem da campanha vai mais para ele (confirmação, envio e atraso continuam normais).
+- **Horário de envio:** só entre 8h e 22h de Brasília (`CAMPANHA_HORA_INICIO` / `CAMPANHA_HORA_FIM`). O que sobrar continua às 8h.
 - Na hora da onda: `/api/campanha?k=ADMIN_KEY&acao=preparar&onda=2` → pega quem recebeu a onda anterior, tira quem já comprou (qualquer pedido pago desde o início da campanha) e quem pediu SAIR.
 - O mesmo agendador de 10 em 10 min envia: ondas mais novas primeiro, e a onda 1 continua com as vagas que sobrarem do limite do dia.
 - Dá para agendar o "preparar" de cada onda no QStash (um agendamento por onda, no horário dela) e apagar depois.
