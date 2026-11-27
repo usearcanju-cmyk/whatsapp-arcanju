@@ -91,17 +91,33 @@ function nsCabecalhos() {
 }
 const nsBase = () => `https://api.tiendanube.com/v1/${process.env.NUVEMSHOP_STORE_ID}`;
 
-async function nsListar(caminho, paginasMax) {
-  const todos = [];
-  for (let page = 1; page <= paginasMax; page++) {
-    const sep = caminho.includes('?') ? '&' : '?';
+async function nsPagina(caminho, page) {
+  const sep = caminho.includes('?') ? '&' : '?';
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
     const r = await fetch(`${nsBase()}${caminho}${sep}per_page=200&page=${page}`, { headers: nsCabecalhos() });
-    if (r.status === 404) break;
+    if (r.status === 404) return [];
+    if (r.status === 429) { await new Promise((ok) => setTimeout(ok, 1500)); continue; }
     if (!r.ok) throw new Error(`Nuvemshop ${caminho} → HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
     const lote = await r.json();
-    if (!Array.isArray(lote) || !lote.length) break;
-    todos.push(...lote);
-    if (lote.length < 200) break;
+    return Array.isArray(lote) ? lote : [];
+  }
+  throw new Error(`Nuvemshop ${caminho} → muitas requisições (429)`);
+}
+
+/* Busca as páginas em paralelo (4 por vez) para caber no tempo da Vercel */
+async function nsListar(caminho, paginasMax) {
+  const todos = [];
+  const PAR = 4;
+  for (let inicio = 1; inicio <= paginasMax; inicio += PAR) {
+    const paginas = [];
+    for (let p = inicio; p < inicio + PAR && p <= paginasMax; p++) paginas.push(p);
+    const lotes = await Promise.all(paginas.map((p) => nsPagina(caminho, p)));
+    let acabou = false;
+    for (const lote of lotes) {
+      todos.push(...lote);
+      if (lote.length < 200) acabou = true;
+    }
+    if (acabou) break;
   }
   return todos;
 }
@@ -237,10 +253,12 @@ async function acaoPreparar(teste, onda) {
   // tira quem pediu SAIR e quem já recebeu esta campanha
   const fila = [];
   let sairam = 0, jaRecebeu = 0;
-  for (let i = 0; i < candidatos.length; i += 100) {
-    const bloco = candidatos.slice(i, i + 100);
-    const optouts = await redis(['MGET', ...bloco.map((c) => `optout:${c.tel}`)]);
-    const enviados = await redis(['SMISMEMBER', K('enviados'), ...bloco.map((c) => c.tel)]);
+  for (let i = 0; i < candidatos.length; i += 500) {
+    const bloco = candidatos.slice(i, i + 500);
+    const [optouts, enviados] = await Promise.all([
+      redis(['MGET', ...bloco.map((c) => `optout:${c.tel}`)]),
+      redis(['SMISMEMBER', K('enviados'), ...bloco.map((c) => c.tel)])
+    ]);
     bloco.forEach((c, j) => {
       if (optouts[j] !== null) { sairam++; return; }
       if (enviados[j]) { jaRecebeu++; return; }
