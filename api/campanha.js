@@ -308,6 +308,45 @@ async function prepararOnda(teste, onda) {
   return { ...resumo, lembretes_antigos_descartados: descartados, modo: 'fila gravada' };
 }
 
+/* Horários das ondas (Brasília). Só um agendamento no QStash (enviar a cada 10 min) faz tudo:
+   na primeira rodada monta a onda 1; quando chega o horário de cada lembrete, monta a onda dele.
+   Dá para trocar com CAMPANHA_ONDAS_HORARIOS="2=2026-11-27T20:00,3=..." */
+function horariosOndas() {
+  const padrao = '2=2026-11-27T20:00,3=2026-11-28T10:00,4=2026-11-28T20:00,5=2026-11-29T10:00,6=2026-11-29T19:00';
+  const m = {};
+  String(process.env.CAMPANHA_ONDAS_HORARIOS || padrao).split(',').forEach((par) => {
+    const [n, quando] = par.split('=').map((x) => x && x.trim());
+    if (n && quando) m[Number(n)] = new Date(/[+-]\d\d:\d\d$|Z$/.test(quando) ? quando : quando + ':00-03:00').getTime();
+  });
+  return m;
+}
+
+async function prepararAutomatico() {
+  const feitas = [];
+  if (!(await redis(['GET', K('preparadaEm')]))) {
+    const r = await acaoPreparar(false, 1);
+    feitas.push({ onda: 1, na_fila: r.na_fila });
+    return feitas; // uma coisa por rodada (limite de 60 s da Vercel)
+  }
+  const h = horariosOndas();
+  for (const n of [2, 3, 4, 5, 6]) {
+    if (!h[n] || Date.now() < h[n] || !templateDe(n)) continue;
+    if (await redis(['GET', K(`onda:${n}:preparada`)])) continue;
+    // marca antes, para duas rodadas simultâneas não montarem a mesma onda
+    const ok = await redis(['SET', K(`onda:${n}:preparada`), new Date().toISOString(), 'NX', 'EX', String(10 * 86400)]);
+    if (!ok) continue;
+    try {
+      const r = await prepararOnda(false, n);
+      feitas.push({ onda: n, na_fila: r.na_fila });
+    } catch (e) {
+      await redis(['DEL', K(`onda:${n}:preparada`)]);
+      throw e;
+    }
+    return feitas;
+  }
+  return feitas;
+}
+
 async function acaoEnviar(teste, para, ondaTeste) {
   if (teste) {
     const template = templateDe(ondaTeste);
@@ -319,6 +358,8 @@ async function acaoEnviar(teste, para, ondaTeste) {
 
   if (process.env.CAMPANHA_ATIVA !== 'sim') return { parado: 'CAMPANHA_ATIVA não está "sim"' };
   if (await redis(['GET', K('pausada')])) return { parado: 'campanha pausada' };
+  const preparadas = await prepararAutomatico();
+  if (preparadas.length) return { preparou_agora: preparadas, aviso: 'filas montadas; o envio começa na próxima rodada' };
   const fim = process.env.CAMPANHA_FIM ? new Date(process.env.CAMPANHA_FIM).getTime() : 0;
   if (fim && Date.now() > fim - 2 * H) return { parado: 'campanha terminando ou terminada — não envia mais' };
   const hora = new Date(Date.now() - 3 * H).getUTCHours();

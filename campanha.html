@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Campanha WhatsApp · Use Arcanju</title>
+<style>
+  :root{--vinho:#6B1620;--fundo:#F5EFE6;--card:#fff;--txt:#2b1a1a;--sub:#7a6a6a;--ok:#1FA24A;--borda:#eadfd6}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--fundo);color:var(--txt);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{background:var(--vinho);color:#fff;padding:18px 16px}
+  header h1{margin:0;font-size:20px}
+  header p{margin:4px 0 0;opacity:.85;font-size:13px}
+  main{max-width:760px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border:1px solid var(--borda);border-radius:14px;padding:16px;margin-bottom:14px}
+  .card h2{margin:0 0 4px;font-size:16px}
+  .card p{margin:0 0 12px;color:var(--sub);font-size:13px}
+  .n{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--vinho);color:#fff;font-size:12px;margin-right:6px}
+  input{width:100%;padding:11px 12px;border:1px solid var(--borda);border-radius:10px;font-size:15px}
+  .linha{display:flex;gap:8px;flex-wrap:wrap}
+  .linha input{flex:1;min-width:180px}
+  button{border:0;border-radius:10px;padding:11px 14px;font-weight:600;font-size:14px;cursor:pointer;background:var(--vinho);color:#fff}
+  button.sec{background:#efe6dc;color:var(--txt)}
+  button.verde{background:var(--ok)}
+  button:disabled{opacity:.5;cursor:wait}
+  pre{white-space:pre-wrap;word-break:break-word;background:#faf6f1;border:1px solid var(--borda);border-radius:10px;padding:10px;font-size:12.5px;margin:10px 0 0;max-height:340px;overflow:auto}
+  .ok{color:var(--ok);font-weight:600}
+  .erro{color:#b3261e;font-weight:600}
+  code{background:#f3ece4;padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Campanha Black Friday · WhatsApp</h1>
+  <p>Digite a chave uma vez. Ela fica guardada só neste navegador.</p>
+</header>
+<main>
+  <div class="card">
+    <h2><span class="n">1</span>Sua ADMIN_KEY</h2>
+    <p>A mesma que está na Vercel em <code>ADMIN_KEY</code>.</p>
+    <div class="linha">
+      <input id="chave" type="password" placeholder="Cole ou digite a ADMIN_KEY" autocomplete="off">
+      <button class="sec" id="ver" type="button">Mostrar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">2</span>Quantas pessoas vão receber</h2>
+    <p>Só conta. Não envia nada.</p>
+    <button data-acao="preparar&teste=1">Contar</button>
+    <pre hidden></pre>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">3</span>Mensagem de teste no seu celular</h2>
+    <p>Manda a mensagem 1 (com a imagem) só para este número.</p>
+    <div class="linha">
+      <input id="tel" type="tel" placeholder="DDD + número, ex.: 37999999999">
+      <button id="btnTeste" type="button">Enviar teste</button>
+    </div>
+    <pre hidden></pre>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">4</span>Ligar os disparos (um agendamento só)</h2>
+    <p>Copie o link e cole no Upstash → QStash → Schedules, no campo de destino, com a agenda <code>*/10 * * * *</code>. Ele monta a lista, envia em lotes e monta cada lembrete na hora certa, sozinho.</p>
+    <div class="linha">
+      <input id="linkAgenda" readonly placeholder="Digite a chave no passo 1">
+      <button class="verde" id="copiar" type="button">Copiar link</button>
+    </div>
+    <pre hidden></pre>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">5</span>Acompanhar</h2>
+    <p>Enviadas, falhas e vendas com o cupom.</p>
+    <div class="linha">
+      <button data-acao="status">Ver status</button>
+      <button class="sec" data-acao="pausar">Pausar</button>
+      <button class="sec" data-acao="retomar">Retomar</button>
+    </div>
+    <pre hidden></pre>
+  </div>
+</main>
+<script>
+(function () {
+  var BASE = location.origin + '/api/campanha';
+  var campo = document.getElementById('chave');
+  try { campo.value = localStorage.getItem('arc_admin_key') || ''; } catch (e) {}
+
+  function chave() { return campo.value.trim(); }
+  function atualizarLink() {
+    var k = chave();
+    document.getElementById('linkAgenda').value = k ? BASE + '?acao=enviar&k=' + encodeURIComponent(k) : '';
+  }
+  campo.addEventListener('input', function () {
+    try { localStorage.setItem('arc_admin_key', chave()); } catch (e) {}
+    atualizarLink();
+  });
+  atualizarLink();
+
+  document.getElementById('ver').addEventListener('click', function () {
+    campo.type = campo.type === 'password' ? 'text' : 'password';
+    this.textContent = campo.type === 'password' ? 'Mostrar' : 'Esconder';
+  });
+
+  function mostrar(pre, texto, classe) {
+    pre.hidden = false;
+    pre.className = classe || '';
+    pre.textContent = texto;
+  }
+
+  async function chamar(acao, botao) {
+    var pre = botao.closest('.card').querySelector('pre');
+    if (!chave()) { mostrar(pre, 'Digite a ADMIN_KEY no passo 1.', 'erro'); return; }
+    botao.disabled = true;
+    mostrar(pre, 'Aguarde…');
+    try {
+      var r = await fetch(BASE + '?acao=' + acao + '&k=' + encodeURIComponent(chave()), { cache: 'no-store' });
+      var j = await r.json().catch(function () { return { erro: 'Resposta inválida (HTTP ' + r.status + ')' }; });
+      mostrar(pre, JSON.stringify(j, null, 2), j.erro ? 'erro' : '');
+    } catch (e) {
+      mostrar(pre, 'Falha de conexão: ' + e.message, 'erro');
+    }
+    botao.disabled = false;
+  }
+
+  document.querySelectorAll('button[data-acao]').forEach(function (b) {
+    b.addEventListener('click', function () { chamar(b.getAttribute('data-acao'), b); });
+  });
+
+  document.getElementById('btnTeste').addEventListener('click', function () {
+    var tel = document.getElementById('tel').value.replace(/\D/g, '');
+    var pre = this.closest('.card').querySelector('pre');
+    if (tel.length < 10) { mostrar(pre, 'Digite o número com DDD.', 'erro'); return; }
+    chamar('enviar&teste=1&onda=1&para=' + tel, this);
+  });
+
+  document.getElementById('copiar').addEventListener('click', async function () {
+    var pre = this.closest('.card').querySelector('pre');
+    var link = document.getElementById('linkAgenda').value;
+    if (!link) { mostrar(pre, 'Digite a ADMIN_KEY no passo 1.', 'erro'); return; }
+    try { await navigator.clipboard.writeText(link); mostrar(pre, 'Link copiado. Agora cole no Upstash.', 'ok'); }
+    catch (e) { document.getElementById('linkAgenda').select(); mostrar(pre, 'Selecionei o link: aperte Ctrl+C.', ''); }
+  });
+})();
+</script>
+</body>
+</html>

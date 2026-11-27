@@ -1,5 +1,8 @@
 # Campanha em massa pelo WhatsApp (ex.: Black Friday)
 
+**Atalho:** abra `/campanha.html`, digite a ADMIN_KEY e use os botões (contar, teste, link do agendamento, status, pausar).
+**Um agendamento só:** o QStash chamando `acao=enviar` a cada 10 min já monta a onda 1 na primeira rodada e cada lembrete no horário de `CAMPANHA_ONDAS_HORARIOS` (padrão: sex 20h, sáb 10h e 20h, dom 10h e 19h). Não precisa agendar os `preparar`.
+
 Arquivo: `api/campanha.js`. Manda um modelo de marketing para quem já comprou e para quem abandonou carrinho, em lotes, respeitando o limite diário da Meta. Nada é enviado enquanto `CAMPANHA_ATIVA` não for `sim`.
 
 ## Quem recebe
