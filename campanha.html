@@ -37,10 +37,10 @@
 </header>
 <main>
   <div class="card">
-    <h2><span class="n">1</span>Sua ADMIN_KEY</h2>
-    <p>A mesma que está na Vercel em <code>ADMIN_KEY</code>.</p>
+    <h2><span class="n">1</span>Sua chave</h2>
+    <p>A <code>CAMPANHA_KEY</code> (ou a <code>ADMIN_KEY</code>) da Vercel.</p>
     <div class="linha">
-      <input id="chave" type="password" placeholder="Cole ou digite a ADMIN_KEY" autocomplete="off">
+      <input id="chave" type="password" placeholder="Digite a chave da campanha" autocomplete="off">
       <button class="sec" id="ver" type="button">Mostrar</button>
     </div>
   </div>
@@ -113,7 +113,7 @@
 
   async function chamar(acao, botao) {
     var pre = botao.closest('.card').querySelector('pre');
-    if (!chave()) { mostrar(pre, 'Digite a ADMIN_KEY no passo 1.', 'erro'); return; }
+    if (!chave()) { mostrar(pre, 'Digite a chave no passo 1.', 'erro'); return; }
     botao.disabled = true;
     mostrar(pre, 'Aguarde…');
     try {
@@ -140,7 +140,7 @@
   document.getElementById('copiar').addEventListener('click', async function () {
     var pre = this.closest('.card').querySelector('pre');
     var link = document.getElementById('linkAgenda').value;
-    if (!link) { mostrar(pre, 'Digite a ADMIN_KEY no passo 1.', 'erro'); return; }
+    if (!link) { mostrar(pre, 'Digite a chave no passo 1.', 'erro'); return; }
     try { await navigator.clipboard.writeText(link); mostrar(pre, 'Link copiado. Agora cole no Upstash.', 'ok'); }
     catch (e) { document.getElementById('linkAgenda').select(); mostrar(pre, 'Selecionei o link: aperte Ctrl+C.', ''); }
   });

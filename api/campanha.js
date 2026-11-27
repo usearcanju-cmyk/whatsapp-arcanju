@@ -457,8 +457,10 @@ async function acaoStatus() {
 
 export default async function handler(req, res) {
   const url = new URL(req.url, 'http://x');
-  const chave = process.env.ADMIN_KEY || process.env.WEBHOOK_SECRET;
-  if (!chave || url.searchParams.get('k') !== chave) return res.status(401).json({ erro: 'Chave inválida' });
+  // aceita a ADMIN_KEY ou uma chave só da campanha (CAMPANHA_KEY)
+  const chaves = [process.env.ADMIN_KEY || process.env.WEBHOOK_SECRET, process.env.CAMPANHA_KEY].filter(Boolean);
+  const k = url.searchParams.get('k');
+  if (!chaves.length || !k || !chaves.includes(k)) return res.status(401).json({ erro: 'Chave inválida' });
 
   const acao = url.searchParams.get('acao') || 'status';
   const teste = url.searchParams.get('teste') === '1';
