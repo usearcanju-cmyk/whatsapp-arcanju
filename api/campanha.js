@@ -207,21 +207,24 @@ async function acaoPreparar(teste, onda) {
   ]);
 
   const compradoras = new Map(); // tel → {nome, quando}
+  const naoPagos = new Map();     // fez pedido mas não pagou (Pix/boleto vencido, cancelado por falta de pagamento)
   for (const p of pedidos) {
-    if (p.status === 'cancelled') continue;
-    if (!['paid', 'authorized'].includes(p.payment_status)) continue;
     const tel = normalizarTelefone(p.contact_phone || (p.customer && p.customer.phone) || (p.shipping_address && p.shipping_address.phone));
     if (!tel) continue;
+    const pago = p.status !== 'cancelled' && ['paid', 'authorized'].includes(p.payment_status);
+    const destino = pago ? compradoras : (['refunded', 'partially_refunded'].includes(p.payment_status) ? null : naoPagos);
+    if (!destino) continue;
     const t = new Date(p.created_at).getTime();
-    const atual = compradoras.get(tel);
-    if (!atual || t > atual.quando) compradoras.set(tel, { nome: primeiroNome(p.contact_name || (p.customer && p.customer.name)), quando: t });
+    const atual = destino.get(tel);
+    if (!atual || t > atual.quando) destino.set(tel, { nome: primeiroNome(p.contact_name || (p.customer && p.customer.name)), quando: t });
   }
+  for (const tel of compradoras.keys()) naoPagos.delete(tel);
 
   const carrinhos = new Map();
   for (const c of checkouts) {
     if (c.completed_at) continue;
     const tel = normalizarTelefone(c.contact_phone || (c.shipping_address && c.shipping_address.phone));
-    if (!tel || compradoras.has(tel)) continue;
+    if (!tel || compradoras.has(tel) || naoPagos.has(tel)) continue;
     const t = new Date(c.created_at).getTime();
     const atual = carrinhos.get(tel);
     if (!atual || t > atual.quando) carrinhos.set(tel, { nome: primeiroNome(c.contact_name), quando: t });
@@ -229,7 +232,7 @@ async function acaoPreparar(teste, onda) {
 
   const ordem = (m, origem) => [...m.entries()].sort((a, b) => b[1].quando - a[1].quando)
     .map(([tel, v]) => ({ tel, nome: v.nome, origem }));
-  const candidatos = [...ordem(compradoras, 'comprou'), ...ordem(carrinhos, 'carrinho')];
+  const candidatos = [...ordem(compradoras, 'comprou'), ...ordem(naoPagos, 'pedido não pago'), ...ordem(carrinhos, 'carrinho')];
 
   // tira quem pediu SAIR e quem já recebeu esta campanha
   const fila = [];
@@ -248,6 +251,7 @@ async function acaoPreparar(teste, onda) {
   const resumo = {
     campanha: CAMP(),
     compradoras: compradoras.size,
+    pedidos_nao_pagos: naoPagos.size,
     carrinhos_sem_compra: carrinhos.size,
     pediram_sair: sairam,
     ja_receberam: jaRecebeu,
